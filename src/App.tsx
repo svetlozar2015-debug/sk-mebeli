@@ -8,6 +8,7 @@ import {
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   onSnapshot,
   serverTimestamp,
@@ -128,14 +129,7 @@ export default function App() {
   const serverHasGalplasOverrideRef = React.useRef(false);
   const serverHasNastehOverrideRef = React.useRef(false);
 
-  // Direct Admin Session State (1-click access while designing)
-  const [adminToken, setAdminToken] = useState<string | null>(() => {
-    try {
-      return window.sessionStorage.getItem('af_admin_token');
-    } catch {
-      return null;
-    }
-  });
+  const [isAdminDoc, setIsAdminDoc] = useState(false);
 
   // Quick Contact Form State (Footer)
   const [contactName, setContactName] = useState('');
@@ -145,7 +139,9 @@ export default function App() {
   const [contactSentOk, setContactSentOk] = useState(false);
 
   const isAdmin = Boolean(
-    (user && user.email === ADMIN_EMAIL && user.emailVerified) || adminToken,
+    user &&
+      user.emailVerified &&
+      ((user.email || '').toLowerCase() === ADMIN_EMAIL.toLowerCase() || isAdminDoc),
   );
 
   const showToast = (msg: string) => {
@@ -299,22 +295,15 @@ export default function App() {
     }
   };
 
-  // 1. Validate Firestore connection, server admin token, server catalog & Auth state
+  // 1. Validate Firestore connection, server catalog & Auth state
   useEffect(() => {
     testFirestoreConnection();
     loadServerCatalog();
 
-    if (adminToken) {
-      fetch('/api/admin/verify', {
-        headers: { Authorization: `Bearer ${adminToken}` },
-      })
-        .then((r) => {
-          if (!r.ok) {
-            window.sessionStorage.removeItem('af_admin_token');
-            setAdminToken(null);
-          }
-        })
-        .catch(() => {});
+    try {
+      window.sessionStorage.removeItem('af_admin_token');
+    } catch {
+      // ignore storage access errors
     }
 
     const unsub = onAuthStateChanged(auth, (currentUser) => {
@@ -324,9 +313,36 @@ export default function App() {
     return () => unsub();
   }, []);
 
+  // 1b. Check Firestore admins/{uid} collection for secondary verified administrators
+  useEffect(() => {
+    let cancelled = false;
+    if (!authReady || !user || !user.emailVerified) {
+      setIsAdminDoc(false);
+      return;
+    }
+    if ((user.email || '').toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+      setIsAdminDoc(true);
+      return;
+    }
+    getDoc(doc(db, 'admins', user.uid))
+      .then((snap) => {
+        if (!cancelled) {
+          setIsAdminDoc(snap.exists());
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setIsAdminDoc(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authReady, user]);
+
   // 2. Seed initial Firestore catalogs once when Firebase Admin logs in for the first time
   useEffect(() => {
-    if (!authReady || !(user && user.email === ADMIN_EMAIL && user.emailVerified)) return;
+    if (!authReady || !isAdmin) return;
     (async () => {
       try {
         const decorsSnap = await getDocs(collection(db, 'board_decors'));
@@ -594,7 +610,7 @@ export default function App() {
   const handleSignInGoogle = async () => {
     try {
       const cred = await signInWithPopup(auth, googleProvider);
-      if (cred.user?.email === ADMIN_EMAIL) {
+      if ((cred.user?.email || '').toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
         showToast(
           lang === 'bg'
             ? 'Успешен админ вход! Отваряне на Администраторското студио...'
@@ -613,24 +629,28 @@ export default function App() {
 
   const handleOpenAdminDirect = () => {
     setMobileMenuOpen(false);
+    if (!isAdmin) {
+      showToast(
+        lang === 'bg'
+          ? 'Достъпът до админ панела е разрешен само за администратор.'
+          : 'Admin panel access is restricted to administrators.',
+      );
+      if (!user) {
+        void handleSignInGoogle();
+      }
+      return;
+    }
     setActiveView('admin');
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    if (!adminToken) {
-      fetch('/api/admin/quick-enter', { method: 'POST' })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((data: { token?: string } | null) => {
-          if (data?.token) {
-            window.sessionStorage.setItem('af_admin_token', data.token);
-            setAdminToken(data.token);
-          }
-        })
-        .catch(() => {});
-    }
   };
 
   const handleSignOut = async () => {
-    window.sessionStorage.removeItem('af_admin_token');
-    setAdminToken(null);
+    try {
+      window.sessionStorage.removeItem('af_admin_token');
+    } catch {
+      // ignore storage access errors
+    }
+    setIsAdminDoc(false);
     if (user) {
       await signOut(auth);
     }
@@ -891,18 +911,20 @@ export default function App() {
               {t(lang, 'navMyProjects')}
             </button>
 
-            <button
-              type="button"
-              onClick={handleOpenAdminDirect}
-              className={`inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs transition-colors whitespace-nowrap shrink-0 ${
-                activeView === 'admin'
-                  ? 'text-[#E5C17B] font-semibold'
-                  : 'text-zinc-400 hover:text-[#E5C17B]'
-              }`}
-            >
-              <SlidersHorizontal className="h-3.5 w-3.5" />
-              <span>{lang === 'bg' ? 'Админ' : 'Admin'}</span>
-            </button>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={handleOpenAdminDirect}
+                className={`inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs transition-colors whitespace-nowrap shrink-0 ${
+                  activeView === 'admin'
+                    ? 'text-[#E5C17B] font-semibold'
+                    : 'text-zinc-400 hover:text-[#E5C17B]'
+                }`}
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                <span>{lang === 'bg' ? 'Админ' : 'Admin'}</span>
+              </button>
+            )}
           </nav>
 
           {/* Zone 3: Language Switch, Auth & Mobile Hamburger Button */}
@@ -914,7 +936,7 @@ export default function App() {
             >
               {lang === 'bg' ? 'BG / EN' : 'EN / BG'}
             </button>
-            {user || adminToken ? (
+            {user ? (
               <button
                 type="button"
                 onClick={handleSignOut}
@@ -1001,16 +1023,18 @@ export default function App() {
             >
               {lang === 'bg' ? 'Контакти' : 'Contacts'}
             </button>
-            <button
-              type="button"
-              onClick={handleOpenAdminDirect}
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-zinc-400 hover:bg-white/5 hover:text-[#E5C17B]"
-            >
-              <SlidersHorizontal className="h-4 w-4" />
-              <span>{t(lang, 'navAdmin')}</span>
-            </button>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={handleOpenAdminDirect}
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-zinc-400 hover:bg-white/5 hover:text-[#E5C17B]"
+              >
+                <SlidersHorizontal className="h-4 w-4" />
+                <span>{t(lang, 'navAdmin')}</span>
+              </button>
+            )}
             <div className="pt-2 border-t border-zinc-800 sm:hidden">
-              {user || adminToken ? (
+              {user ? (
                 <button
                   type="button"
                   onClick={() => {
@@ -1193,23 +1217,59 @@ export default function App() {
           />
         )}
 
-        {activeView === 'admin' && (
-          <AdminStudio
-            lang={lang}
-            user={user}
-            adminToken={adminToken}
-            siteSettings={siteSettings}
-            decors={decors}
-            hardwareTiers={hardwareTiers}
-            meritItems={meritItems}
-            galplasItems={galplasItems}
-            nastehItems={nastehItems}
-            nastehCustomSubsections={nastehCustomSubsections}
-            gallery={gallery}
-            onInspectIn3D={loadUserProjectIntoStudio}
-            onCatalogUpdated={loadServerCatalog}
-          />
-        )}
+        {activeView === 'admin' &&
+          (isAdmin ? (
+            <AdminStudio
+              lang={lang}
+              user={user}
+              isAdmin={isAdmin}
+              siteSettings={siteSettings}
+              decors={decors}
+              hardwareTiers={hardwareTiers}
+              meritItems={meritItems}
+              galplasItems={galplasItems}
+              nastehItems={nastehItems}
+              nastehCustomSubsections={nastehCustomSubsections}
+              gallery={gallery}
+              onInspectIn3D={loadUserProjectIntoStudio}
+              onCatalogUpdated={loadServerCatalog}
+            />
+          ) : (
+            <section className="mx-auto max-w-xl px-6 py-20 text-center">
+              <div className="rounded-2xl border border-zinc-800 bg-[#141518] p-8 text-zinc-100 shadow-2xl">
+                <h2 className="font-display text-2xl font-semibold text-[#E5C17B]">
+                  {lang === 'bg' ? 'Само за администратор' : 'Administrator Only'}
+                </h2>
+                <p className="mt-3 text-sm text-zinc-300">
+                  {user
+                    ? lang === 'bg'
+                      ? 'Влезлият профил няма администраторски права.'
+                      : 'The signed-in account does not have administrator permissions.'
+                    : lang === 'bg'
+                      ? 'Влезте с потвърдения администраторски Google профил, за да отворите админ панела.'
+                      : 'Sign in with a verified administrator Google account to access the admin panel.'}
+                </p>
+                <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                  {!user && (
+                    <button
+                      type="button"
+                      onClick={handleSignInGoogle}
+                      className="rounded-lg bg-[#C59B57] px-4 py-2.5 text-xs font-bold text-[#0B0C10] hover:bg-[#D8B06E] transition-colors"
+                    >
+                      {t(lang, 'signInGoogle')}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setActiveView('home')}
+                    className="rounded-lg border border-zinc-700 bg-[#1B1E26] px-4 py-2.5 text-xs font-semibold text-zinc-200 hover:border-[#C59B57] transition-colors"
+                  >
+                    {lang === 'bg' ? 'Към началото' : 'Back to Home'}
+                  </button>
+                </div>
+              </div>
+            </section>
+          ))}
 
         {activeView === 'home' && (
           <>
@@ -1911,13 +1971,15 @@ export default function App() {
           <span>
             © {new Date().getFullYear()} {companyName}. {lang === 'bg' ? 'Всички права запазени.' : 'All rights reserved.'}
           </span>
-          <button
-            type="button"
-            onClick={handleOpenAdminDirect}
-            className="text-zinc-400 hover:text-[#E5B887] font-medium transition-colors"
-          >
-            {t(lang, 'navAdmin')}
-          </button>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={handleOpenAdminDirect}
+              className="text-zinc-400 hover:text-[#E5B887] font-medium transition-colors"
+            >
+              {t(lang, 'navAdmin')}
+            </button>
+          )}
         </div>
       </footer>
     </div>
