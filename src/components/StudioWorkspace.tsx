@@ -216,8 +216,29 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({
     preset: CameraPreset;
     seq: number;
   } | null>(null);
-  const [undoStack, setUndoStack] = useState<FurnitureConfig[]>([]);
-  const [redoStack, setRedoStack] = useState<FurnitureConfig[]>([]);
+  const [undoStack, setUndoStack] = useState<
+    Array<{
+      config: FurnitureConfig;
+      selectedColumnId: string | null;
+      selectedSlotIdx: number;
+    }>
+  >([]);
+  const [redoStack, setRedoStack] = useState<
+    Array<{
+      config: FurnitureConfig;
+      selectedColumnId: string | null;
+      selectedSlotIdx: number;
+    }>
+  >([]);
+  const [nextCabinetDimsMm, setNextCabinetDimsMm] = useState<{
+    widthMm: number;
+    heightMm: number;
+    depthMm: number;
+  }>({
+    widthMm: 600,
+    heightMm: Math.round((config.heightCm || 86) * 10),
+    depthMm: Math.round((config.depthCm || 58) * 10),
+  });
   const [newProjectModalOpen, setNewProjectModalOpen] = useState(false);
   const [demoVideoOpen, setDemoVideoOpen] = useState(false);
   const [demoStepIdx, setDemoStepIdx] = useState(0);
@@ -338,19 +359,16 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({
     [hardwareTiers, config.hardwareTierId],
   );
 
-  // Keep selectedColumnId synced whenever preset/template swaps or project is cleared
+  // Keep selectedColumnId synced without overriding explicit null (no selection)
   const selectedColumn = useMemo(() => {
+    if (!selectedColumnId) return null;
     const allCols = [...config.columns, ...config.wingColumns];
-    return allCols.find((c) => c.id === selectedColumnId) || config.columns[0] || null;
+    return allCols.find((c) => c.id === selectedColumnId) || null;
   }, [config.columns, config.wingColumns, selectedColumnId]);
 
   useEffect(() => {
-    if (!selectedColumn && selectedColumnId !== null) {
+    if (selectedColumnId !== null && !selectedColumn) {
       setSelectedColumnId(null);
-      setRightInspectorOpen(false);
-      setSelectedSlotIdx(0);
-    } else if (selectedColumn && selectedColumn.id !== selectedColumnId) {
-      setSelectedColumnId(selectedColumn.id);
       setSelectedSlotIdx(0);
     }
   }, [selectedColumn, selectedColumnId]);
@@ -832,6 +850,11 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({
     setSwapSourceColId(null);
     setSelectedColumnId(config.columns[0]?.id ?? null);
     setSelectedSlotIdx(0);
+    setNextCabinetDimsMm({
+      widthMm: 600,
+      heightMm: Math.round((config.heightCm || 86) * 10),
+      depthMm: Math.round((config.depthCm || 58) * 10),
+    });
     setStudioTab('view3d');
     setCenterTriggerSeq((s) => s + 1);
   }, [externalLoadSeq]);
@@ -1031,8 +1054,15 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({
   const applyNormalized = (draft: FurnitureConfig) => {
     const hwLevel: HardwareTierLevel = selectedHwTier?.tier || 'economy';
     const { config: normalized } = enforceStructuralStandards(draft, hwLevel);
-    const snapshot = structuredClone(config);
-    setUndoStack((prev) => [...prev.slice(-39), snapshot]);
+    if (JSON.stringify(normalized) === JSON.stringify(config)) {
+      return;
+    }
+    const snapshot = {
+      config: structuredClone(config),
+      selectedColumnId,
+      selectedSlotIdx,
+    };
+    setUndoStack((prev) => [...prev.slice(-59), snapshot]);
     setRedoStack([]);
     onChangeConfig(normalized);
   };
@@ -1040,19 +1070,31 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({
   const handleUndo = () => {
     if (undoStack.length === 0) return;
     const previous = undoStack[undoStack.length - 1];
-    const snapshot = structuredClone(config);
+    const snapshot = {
+      config: structuredClone(config),
+      selectedColumnId,
+      selectedSlotIdx,
+    };
     setUndoStack((prev) => prev.slice(0, -1));
-    setRedoStack((prev) => [...prev.slice(-39), snapshot]);
-    onChangeConfig(structuredClone(previous));
+    setRedoStack((prev) => [...prev.slice(-59), snapshot]);
+    onChangeConfig(structuredClone(previous.config));
+    setSelectedColumnId(previous.selectedColumnId);
+    setSelectedSlotIdx(previous.selectedSlotIdx);
   };
 
   const handleRedo = () => {
     if (redoStack.length === 0) return;
     const next = redoStack[redoStack.length - 1];
-    const snapshot = structuredClone(config);
+    const snapshot = {
+      config: structuredClone(config),
+      selectedColumnId,
+      selectedSlotIdx,
+    };
     setRedoStack((prev) => prev.slice(0, -1));
-    setUndoStack((prev) => [...prev.slice(-39), snapshot]);
-    onChangeConfig(structuredClone(next));
+    setUndoStack((prev) => [...prev.slice(-59), snapshot]);
+    onChangeConfig(structuredClone(next.config));
+    setSelectedColumnId(next.selectedColumnId);
+    setSelectedSlotIdx(next.selectedSlotIdx);
   };
 
   const undoFnRef = useRef(handleUndo);
@@ -1066,15 +1108,30 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({
         setSwapSourceColId(null);
       }
       const target = e.target as HTMLElement | null;
-      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+      if (target) {
+        if (target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+        if (target.tagName === 'INPUT') {
+          const inputType = ((target as HTMLInputElement).type || 'text').toLowerCase();
+          if (
+            inputType !== 'range' &&
+            inputType !== 'checkbox' &&
+            inputType !== 'radio' &&
+            inputType !== 'button'
+          ) {
+            return;
+          }
+        }
+      }
+      const isZ = e.code === 'KeyZ' || e.key.toLowerCase() === 'z';
+      const isY = e.code === 'KeyY' || e.key.toLowerCase() === 'y';
+      if ((e.ctrlKey || e.metaKey) && isZ) {
         e.preventDefault();
         if (e.shiftKey) {
           redoFnRef.current();
         } else {
           undoFnRef.current();
         }
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+      } else if ((e.ctrlKey || e.metaKey) && isY) {
         e.preventDefault();
         redoFnRef.current();
       }
@@ -1099,6 +1156,7 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({
     setSelectedColumnId(null);
     setSwapSourceColId(null);
     setSelectedSlotIdx(0);
+    setNextCabinetDimsMm({ widthMm: 600, heightMm: 860, depthMm: 580 });
     setProjectTitle('');
     setCustomerPhone('');
     setQuestionText('');
@@ -1121,24 +1179,44 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({
   };
 
   const handleAddColumn = () => {
+    const round1 = (v: number) => Math.round(v * 10) / 10;
+    const initW = Math.max(25, Math.min(180, round1(nextCabinetDimsMm.widthMm / 10)));
+    const initH = Math.max(35, Math.min(275, round1(nextCabinetDimsMm.heightMm / 10)));
+    const initD = Math.max(22, Math.min(80, round1(nextCabinetDimsMm.depthMm / 10)));
+    const wasEmpty = config.columns.length === 0 && config.wingColumns.length === 0;
     const newColId = `col_${Date.now().toString(36)}`;
-    const nextCols = [
+    const nextCols: ColumnConfig[] = [
       ...config.columns,
       {
         id: newColId,
-        widthCm: 60,
+        widthCm: initW,
+        heightCm: wasEmpty
+          ? undefined
+          : Math.abs(initH - config.heightCm) < 0.05
+            ? undefined
+            : initH,
+        depthCm: wasEmpty
+          ? undefined
+          : Math.abs(initD - config.depthCm) < 0.05
+            ? undefined
+            : initD,
         slots: [
           {
             id: `sl_${Date.now().toString(36)}`,
             heightRatio: 1,
-            type: 'door_left' as SlotType,
+            type: (initW > 60 ? 'door_double' : 'door_left') as SlotType,
             internalShelves: 1,
           },
         ],
       },
     ];
-    const nextWidth = Math.min(480, config.widthCm + 60);
-    applyNormalized({ ...config, widthCm: nextWidth, columns: nextCols });
+    const nextWidth = round1(nextCols.reduce((s, c) => s + c.widthCm, 0));
+    applyNormalized({
+      ...config,
+      ...(wasEmpty ? { heightCm: initH, depthCm: initD } : {}),
+      widthCm: nextWidth,
+      columns: nextCols,
+    });
     setSelectedColumnId(newColId);
     setSelectedSlotIdx(0);
   };
@@ -1175,7 +1253,6 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({
           wingColumns: [],
         });
         setSelectedColumnId(null);
-        setRightInspectorOpen(false);
         setIsolatedMode(false);
         setAllOpen(false);
         setSelectedSlotIdx(0);
@@ -1293,7 +1370,13 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({
     setSelectedSlotIdx(0);
   };
 
-  const handleSelectOrSwapColumn = (colId: string, slotIdx?: number) => {
+  const handleSelectOrSwapColumn = (colId: string | null, slotIdx?: number) => {
+    if (!colId) {
+      setSwapSourceColId(null);
+      setSelectedColumnId(null);
+      setSelectedSlotIdx(0);
+      return;
+    }
     if (swapSourceColId) {
       if (colId === swapSourceColId) {
         setSwapSourceColId(null);
@@ -2462,10 +2545,10 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({
                 disabled={undoStack.length === 0}
                 onClick={handleUndo}
                 className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium text-zinc-200 hover:bg-white/10 disabled:opacity-35 disabled:pointer-events-none transition-colors whitespace-nowrap"
-                title={lang === 'bg' ? 'Назад (Ctrl+Z)' : 'Undo (Ctrl+Z)'}
+                title={lang === 'bg' ? 'Назад (Undo) — Ctrl+Z' : 'Undo (Ctrl+Z)'}
               >
                 <Undo2 className="h-3.5 w-3.5" />
-                <span>{lang === 'bg' ? 'Назад' : 'Undo'}</span>
+                <span>{lang === 'bg' ? 'Назад (Undo)' : 'Undo'}</span>
               </button>
               <button
                 type="button"
@@ -3249,6 +3332,10 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({
             }
             onCancelSwapMode={() => setSwapSourceColId(null)}
             getSlotShortLabel={getSlotShortLabel}
+            nextCabinetDimsMm={nextCabinetDimsMm}
+            onChangeNextCabinetDimsMm={(patch) =>
+              setNextCabinetDimsMm((prev) => ({ ...prev, ...patch }))
+            }
           />
         </div>
       )}
@@ -3404,10 +3491,12 @@ export const StudioWorkspace: React.FC<StudioWorkspaceProps> = ({
               type="button"
               onClick={() => {
                 setIsolatedMode(false);
+                setSelectedColumnId(null);
+                setSelectedSlotIdx(0);
                 setStudioTab('view3d');
               }}
               className={`rounded px-2 py-1 text-[11px] transition-colors whitespace-nowrap ${
-                !isolatedMode
+                !isolatedMode && !selectedColumn
                   ? 'bg-[#273147] text-[#E6B88A] font-semibold border border-[#B47B44]/50'
                   : 'bg-[#141924] text-zinc-400 hover:text-zinc-200'
               }`}
