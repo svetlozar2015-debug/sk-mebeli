@@ -322,8 +322,12 @@ export function enforceStructuralStandards(
 
   const roundMmCm = (v: number) => Math.round(v * 10) / 10;
 
-  // Clamp sensible manufacturing limits (in cm, keeping 1 mm resolution)
-  config.widthCm = Math.max(25, Math.min(540, roundMmCm(config.widthCm)));
+  const workingWidthSum = (config.columns || []).reduce(
+    (s, c) => s + Math.max(25, roundMmCm(c.widthCm || 60)),
+    0,
+  );
+  // Clamp sensible manufacturing limits (in cm, keeping 1 mm resolution) without shrinking existing bays
+  config.widthCm = Math.max(25, Math.min(Math.max(540, workingWidthSum), roundMmCm(config.widthCm)));
   config.heightCm = Math.max(35, Math.min(275, roundMmCm(config.heightCm)));
   config.depthCm = Math.max(20, Math.min(85, roundMmCm(config.depthCm)));
   config.plinthCm = Math.max(0, Math.min(20, Math.round(config.plinthCm)));
@@ -356,7 +360,7 @@ export function enforceStructuralStandards(
     });
   }
 
-  // Split any oversized columns (> 90 cm) to prevent shelf sagging & oversized doors
+  // Validate column spans without splitting/adding new cabinets on parameter changes
   const splitOversizedColumns = (cols: ColumnConfig[], targetTotalCm: number): ColumnConfig[] => {
     let working: ColumnConfig[] =
       cols.length > 0
@@ -404,7 +408,7 @@ export function enforceStructuralStandards(
       });
     }
 
-    // Now enforce <= 90 cm per bay by splitting any bay > 90 cm (except corner_blind / bench_seat / shoe_rack up to 120 cm)
+    // Warn when span exceeds 90 cm without auto-creating extra cabinets
     const result: ColumnConfig[] = [];
     for (const col of working) {
       const allowWide =
@@ -412,39 +416,14 @@ export function enforceStructuralStandards(
           ['corner_blind', 'bench_seat', 'coat_panel', 'tv_niche'].includes(sl.type),
         ) && col.widthCm <= 125;
       if (col.widthCm > MAX_UNSUPPORTED_SPAN_CM && !allowWide) {
-        const parts = Math.ceil(col.widthCm / MAX_UNSUPPORTED_SPAN_CM);
-        const baseW = Math.floor(col.widthCm / parts);
-        const rem = col.widthCm - baseW * parts;
-        for (let i = 0; i < parts; i++) {
-          const w = baseW + (i === parts - 1 ? rem : 0);
-          result.push({
-            ...col,
-            id: i === 0 ? col.id : makeId('col'),
-            widthCm: w,
-            slots: col.slots.map((s): SlotConfig => {
-              const nextType: SlotType =
-                w <= MAX_SINGLE_DOOR_CM && s.type === 'door_double'
-                  ? 'door_left'
-                  : w > MAX_SINGLE_DOOR_CM && (s.type === 'door_left' || s.type === 'door_right')
-                    ? 'door_double'
-                    : s.type;
-              return {
-                ...s,
-                id: i === 0 ? s.id : makeId('slot'),
-                type: nextType,
-              };
-            }),
-          });
-        }
         notices.push({
           code: 'AUTO_DIVIDER_ADDED',
           severity: 'info',
-          messageBg: `Добавен е конструктивен делител (секция ${col.widthCm} см надвишава 90 см лимит за ПДЧ без провисване).`,
-          messageEn: `Structural divider added (${col.widthCm} cm bay exceeds 90 cm MFC anti-sag limit).`,
+          messageBg: `Секция ${col.widthCm} см надвишава 90 см стандарт за ПДЧ без вертикален делител — препоръчително е разделяне.`,
+          messageEn: `Bay (${col.widthCm} cm) exceeds 90 cm MFC anti-sag span — consider splitting with a divider.`,
         });
-      } else {
-        result.push(col);
       }
+      result.push(col);
     }
 
     // Enforce door width <= 60 cm and drawer/cargo/appliance ergonomic warnings
