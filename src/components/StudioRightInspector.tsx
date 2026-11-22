@@ -93,6 +93,10 @@ export interface StudioRightInspectorProps {
   onToggleSwapMode: (colId: string) => void;
   onCancelSwapMode: () => void;
   getSlotShortLabel: (slot: SlotConfig, lang: Language) => string;
+  nextCabinetDimsMm?: { widthMm: number; heightMm: number; depthMm: number };
+  onChangeNextCabinetDimsMm?: (
+    patch: Partial<{ widthMm: number; heightMm: number; depthMm: number }>,
+  ) => void;
 }
 
 export const StudioRightInspector: React.FC<StudioRightInspectorProps> = ({
@@ -134,8 +138,86 @@ export const StudioRightInspector: React.FC<StudioRightInspectorProps> = ({
   onToggleSwapMode,
   onCancelSwapMode,
   getSlotShortLabel,
+  nextCabinetDimsMm = {
+    widthMm: 600,
+    heightMm: Math.round((config.heightCm || 86) * 10),
+    depthMm: Math.round((config.depthCm || 58) * 10),
+  },
+  onChangeNextCabinetDimsMm,
 }) => {
-  if (!open || !selectedColumn) return null;
+  if (!open) return null;
+
+  if (!selectedColumn) {
+    return (
+      <aside className="w-[300px] sm:w-[325px] shrink-0 border-l border-[#252D3F] bg-[#101520] flex flex-col min-h-0 z-20">
+        <div className="flex items-center justify-between gap-2 border-b border-[#252D3F] bg-[#0B0F17] px-3 py-2 shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <SlidersHorizontal className="h-4 w-4 text-[#D49B62] shrink-0" />
+            <div className="min-w-0">
+              <div className="text-xs font-semibold text-white truncate">
+                {lang === 'bg' ? 'Следващ шкаф (без избран)' : 'Next Cabinet (No Selection)'}
+              </div>
+              <div className="font-mono-tabular text-[10px] text-[#E6B88A]">
+                {nextCabinetDimsMm.widthMm} × {nextCabinetDimsMm.heightMm} × {nextCabinetDimsMm.depthMm} мм
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onToggleOpen}
+            title={lang === 'bg' ? 'Скрий десния панел' : 'Collapse panel'}
+            className="rounded p-1 text-zinc-400 hover:bg-white/10 hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-3 space-y-3">
+          <div className="rounded-lg border border-[#252D3F] bg-[#0D111A] p-2.5 text-[11px] leading-snug text-zinc-300">
+            {lang === 'bg'
+              ? 'Няма избран шкаф. Промяната на размерите задава началните размери за следващия добавен модул.'
+              : 'No cabinet selected. Changing dimensions sets initial size for the next added module.'}
+          </div>
+
+          <button
+            type="button"
+            onClick={onAddColumn}
+            className="w-full flex items-center justify-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-950/40 py-2 text-xs font-semibold text-emerald-200 hover:bg-emerald-900/60"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>{lang === 'bg' ? 'Добави модул с тези размери' : 'Add Module With Dimensions'}</span>
+          </button>
+
+          <div className="space-y-2">
+            <MmDimensionControl
+              label={lang === 'bg' ? 'Ширина на шкафа (мм)' : 'Cabinet Width (mm)'}
+              valueMm={nextCabinetDimsMm.widthMm}
+              minMm={250}
+              maxMm={1800}
+              stepMm={10}
+              onChangeMm={(mm) => onChangeNextCabinetDimsMm?.({ widthMm: mm })}
+            />
+            <MmDimensionControl
+              label={lang === 'bg' ? 'Височина на шкафа (мм)' : 'Cabinet Height (mm)'}
+              valueMm={nextCabinetDimsMm.heightMm}
+              minMm={350}
+              maxMm={2750}
+              stepMm={10}
+              onChangeMm={(mm) => onChangeNextCabinetDimsMm?.({ heightMm: mm })}
+            />
+            <MmDimensionControl
+              label={lang === 'bg' ? 'Дълбочина (мм)' : 'Depth (mm)'}
+              valueMm={nextCabinetDimsMm.depthMm}
+              minMm={220}
+              maxMm={800}
+              stepMm={10}
+              onChangeMm={(mm) => onChangeNextCabinetDimsMm?.({ depthMm: mm })}
+            />
+          </div>
+        </div>
+      </aside>
+    );
+  }
 
   const activeSlot = selectedColumn.slots[selectedSlotIdx] || selectedColumn.slots[0] || null;
   if (!activeSlot) return null;
