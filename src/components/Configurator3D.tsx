@@ -51,7 +51,7 @@ interface Configurator3DProps {
   config: FurnitureConfig;
   decors: BoardDecor[];
   selectedColumnId: string | null;
-  onSelectColumn: (colId: string, slotIdx?: number) => void;
+  onSelectColumn: (colId: string | null, slotIdx?: number) => void;
   isolatedMode: boolean;
   onToggleIsolate: () => void;
   allOpen: boolean;
@@ -3451,6 +3451,8 @@ export const Configurator3D: React.FC<Configurator3DProps> = ({
             requestRender();
           }
         }
+      } else {
+        onSelectColumnRef.current(null);
       }
     };
 
