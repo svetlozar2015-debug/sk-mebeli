@@ -97,7 +97,7 @@ import { AdminPartnerCatalog } from './AdminPartnerCatalog';
 interface AdminStudioProps {
   lang: Language;
   user: User | null;
-  adminToken?: string | null;
+  isAdmin?: boolean;
   siteSettings: SiteSettings;
   decors: BoardDecor[];
   hardwareTiers: HardwareTier[];
@@ -177,7 +177,7 @@ async function compressImageFileToDataUrl(file: File, maxDim = 1100): Promise<st
 export const AdminStudio: React.FC<AdminStudioProps> = ({
   lang,
   user,
-  adminToken,
+  isAdmin = false,
   siteSettings,
   decors,
   hardwareTiers,
@@ -196,15 +196,16 @@ export const AdminStudio: React.FC<AdminStudioProps> = ({
   const [contactMessages, setContactMessages] = useState<ContactInquiryEntry[]>([]);
   const [contactsLoading, setContactsLoading] = useState(false);
 
-  const isFirebaseAdmin = Boolean(user && user.email === ADMIN_EMAIL && user.emailVerified);
+  const isFirebaseAdmin = Boolean(
+    user &&
+      user.emailVerified &&
+      (isAdmin || (user.email || '').toLowerCase() === ADMIN_EMAIL.toLowerCase()),
+  );
 
   const getAdminAuthHeader = async (): Promise<string | null> => {
-    if (adminToken) return `Bearer ${adminToken}`;
-    if (user) {
-      const tok = await user.getIdToken();
-      return `Bearer ${tok}`;
-    }
-    return null;
+    if (!user || !user.emailVerified || !isFirebaseAdmin) return null;
+    const tok = await user.getIdToken();
+    return `Bearer ${tok}`;
   };
 
   // Inquiries, Client CRM & Projects Search (handles 400-500+ projects smoothly!)
@@ -400,9 +401,9 @@ export const AdminStudio: React.FC<AdminStudioProps> = ({
       cancelled = true;
       unsub();
     };
-  }, [user, adminToken, isFirebaseAdmin]);
+  }, [user, isFirebaseAdmin]);
 
-  // Load server-side CRM projects (available both in 1-click Admin mode & Firebase Admin mode)
+  // Load server-side CRM projects (Firebase Admin only)
   const loadCrmProjects = async () => {
     try {
       const authHdr = await getAdminAuthHeader();
@@ -420,8 +421,12 @@ export const AdminStudio: React.FC<AdminStudioProps> = ({
   };
 
   useEffect(() => {
+    if (!isFirebaseAdmin) {
+      setCrmProjects([]);
+      return;
+    }
     loadCrmProjects();
-  }, [user, adminToken]);
+  }, [user, isFirebaseAdmin]);
 
   // Load all client projects (Firestore Admin)
   useEffect(() => {
@@ -610,8 +615,12 @@ export const AdminStudio: React.FC<AdminStudioProps> = ({
   };
 
   useEffect(() => {
+    if (!isFirebaseAdmin) {
+      setContactMessages([]);
+      return;
+    }
     loadContactMessages();
-  }, [user, adminToken]);
+  }, [user, isFirebaseAdmin]);
 
   const kpiStats = useMemo(() => {
     const total = allProjects.length;
@@ -2105,6 +2114,23 @@ export const AdminStudio: React.FC<AdminStudioProps> = ({
     }
   };
 
+  if (!isFirebaseAdmin) {
+    return (
+      <section className="mx-auto max-w-xl px-6 py-16 text-center">
+        <div className="rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm">
+          <h2 className="font-display text-2xl font-semibold text-zinc-900">
+            {lang === 'bg' ? 'Само за администратор' : 'Administrator Only'}
+          </h2>
+          <p className="mt-2 text-sm text-zinc-600">
+            {lang === 'bg'
+              ? 'Достъпът до админ панела е разрешен само с потвърден администраторски профил.'
+              : 'Admin panel access requires a verified administrator account.'}
+          </p>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="mx-auto max-w-[1400px] px-6 py-10">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-zinc-200 pb-4">
@@ -2113,7 +2139,7 @@ export const AdminStudio: React.FC<AdminStudioProps> = ({
             {t(lang, 'adminTitle')}
           </h2>
           <p className="text-xs text-zinc-500">
-            {user?.email || ADMIN_EMAIL} · {lang === 'bg' ? 'Пълен контрол над скрити цени, проекти и галерия' : 'Private pricing, projects & gallery control'}
+            {user?.email} · {lang === 'bg' ? 'Пълен контрол над скрити цени, проекти и галерия' : 'Private pricing, projects & gallery control'}
           </p>
         </div>
 
