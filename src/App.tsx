@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  getRedirectResult,
   onAuthStateChanged,
   signInWithPopup,
+  signInWithRedirect,
   signOut,
   User,
 } from 'firebase/auth';
@@ -15,6 +17,7 @@ import {
   setDoc,
 } from 'firebase/firestore';
 import {
+  AlertTriangle,
   Award,
   CheckCircle2,
   Clock,
@@ -22,12 +25,14 @@ import {
   Facebook,
   Images,
   Instagram,
+  LogIn,
   Mail,
   MapPin,
   Menu,
   MessageCircle,
   Phone,
   PlayCircle,
+  RefreshCw,
   Send,
   SlidersHorizontal,
   Sparkles,
@@ -84,6 +89,69 @@ import {
 
 type ActiveSection = 'home' | 'my_projects' | 'admin';
 
+function formatFirebaseAuthError(err: unknown) {
+  const code =
+    typeof err === 'object' && err !== null && 'code' in err
+      ? String((err as { code?: unknown }).code || 'auth/unknown')
+      : 'auth/unknown';
+  const rawMessage = err instanceof Error ? err.message : String(err);
+  const host = typeof window !== 'undefined' ? window.location.hostname : '';
+
+  if (code === 'auth/unauthorized-domain') {
+    return {
+      code,
+      rawMessage,
+      messageBg: `Домейнът „${host}“ не е добавен в разрешените домейни (Authorized domains) във Firebase Console → Authentication → Settings → Authorized domains.`,
+      messageEn: `Domain "${host}" is not listed in Firebase Console → Authentication → Settings → Authorized domains.`,
+    };
+  }
+  if (
+    code === 'auth/popup-blocked' ||
+    code === 'auth/operation-not-supported-in-this-environment'
+  ) {
+    return {
+      code,
+      rawMessage,
+      messageBg:
+        'Браузърът блокира изскачащия прозорец за Google вход. Използвайте „Вход с пренасочване“ по-долу или разрешете изскачащите прозорци.',
+      messageEn:
+        'Your browser blocked the Google sign-in popup. Use "Sign in with Redirect" below or allow popups.',
+    };
+  }
+  if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+    return {
+      code,
+      rawMessage,
+      messageBg:
+        'Прозорецът за вход с Google беше затворен преди завършване на входа. На публичен домейн това често се случва при блокирани изскачащи прозорци/бисквитки или неразрешен домейн. Опитайте „Вход с пренасочване“.',
+      messageEn:
+        'The Google sign-in window closed before completing authentication. Try "Sign in with Redirect" below or check Firebase Authorized domains.',
+    };
+  }
+  if (code === 'auth/operation-not-allowed') {
+    return {
+      code,
+      rawMessage,
+      messageBg: 'Методът Google Sign-In не е активиран във Firebase Authentication.',
+      messageEn: 'Google Sign-In provider is not enabled in Firebase Authentication.',
+    };
+  }
+  if (code === 'auth/network-request-failed') {
+    return {
+      code,
+      rawMessage,
+      messageBg: 'Мрежова грешка при връзка с Google / Firebase Auth. Проверете интернет връзката.',
+      messageEn: 'Network error while contacting Google / Firebase Auth.',
+    };
+  }
+  return {
+    code,
+    rawMessage,
+    messageBg: `Грешка при вход с Google (${code}). Проверете настройките на Firebase Authentication за домейн „${host}“.`,
+    messageEn: `Google Sign-In failed (${code}). Check Firebase Authentication settings for "${host}".`,
+  };
+}
+
 export default function App() {
   const [lang, setLang] = useState<Language>('bg');
   const [activeView, setActiveView] = useState<ActiveSection>('home');
@@ -130,6 +198,14 @@ export default function App() {
   const serverHasNastehOverrideRef = React.useRef(false);
 
   const [isAdminDoc, setIsAdminDoc] = useState(false);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authErrorInfo, setAuthErrorInfo] = useState<{
+    code: string;
+    messageBg: string;
+    messageEn: string;
+    rawMessage: string;
+  } | null>(null);
 
   // Quick Contact Form State (Footer)
   const [contactName, setContactName] = useState('');
@@ -306,9 +382,29 @@ export default function App() {
       // ignore storage access errors
     }
 
+    getRedirectResult(auth)
+      .then((cred) => {
+        if (cred?.user) {
+          setAuthModalOpen(false);
+          setAuthErrorInfo(null);
+          if ((cred.user.email || '').toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+            showToast('Успешен админ вход!');
+          }
+        }
+      })
+      .catch((err) => {
+        console.error('Google Redirect Sign-In error:', err);
+        setAuthErrorInfo(formatFirebaseAuthError(err));
+        setAuthModalOpen(true);
+      });
+
     const unsub = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setAuthReady(true);
+      if (currentUser) {
+        setAuthModalOpen(false);
+        setAuthErrorInfo(null);
+      }
     });
     return () => unsub();
   }, []);
@@ -608,8 +704,12 @@ export default function App() {
   }, []);
 
   const handleSignInGoogle = async () => {
+    setAuthBusy(true);
+    setAuthErrorInfo(null);
     try {
       const cred = await signInWithPopup(auth, googleProvider);
+      setAuthModalOpen(false);
+      setAuthErrorInfo(null);
       if ((cred.user?.email || '').toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
         showToast(
           lang === 'bg'
@@ -619,11 +719,23 @@ export default function App() {
       }
     } catch (err) {
       console.error('Google Sign-In error:', err);
-      showToast(
-        lang === 'bg'
-          ? 'Входът с Google беше отменен или блокиран.'
-          : 'Google Sign-In was cancelled or blocked.',
-      );
+      setAuthErrorInfo(formatFirebaseAuthError(err));
+      setAuthModalOpen(true);
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const handleSignInGoogleRedirect = async () => {
+    setAuthBusy(true);
+    setAuthErrorInfo(null);
+    try {
+      await signInWithRedirect(auth, googleProvider);
+    } catch (err) {
+      console.error('Google Redirect Sign-In start error:', err);
+      setAuthErrorInfo(formatFirebaseAuthError(err));
+      setAuthModalOpen(true);
+      setAuthBusy(false);
     }
   };
 
@@ -1199,6 +1311,99 @@ export default function App() {
         onClose={() => setGallerySlideOpen(false)}
         onLoadIn3D={(presetId, category) => loadPresetIntoStudio(presetId, category)}
       />
+
+      {authModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4"
+          onClick={() => {
+            if (!authBusy) setAuthModalOpen(false);
+          }}
+        >
+          <div
+            className="relative w-full max-w-md rounded-2xl border border-[#C59B57]/45 bg-[#111318] p-6 text-zinc-100 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              disabled={authBusy}
+              onClick={() => setAuthModalOpen(false)}
+              aria-label={lang === 'bg' ? 'Затвори' : 'Close'}
+              className="absolute right-4 top-4 rounded-lg border border-zinc-700 bg-[#181B22] p-1.5 text-zinc-300 hover:border-[#C59B57] hover:text-white transition-colors disabled:opacity-50"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            <div className="flex items-center gap-3 pr-8">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-amber-500/40 bg-amber-500/15 text-amber-400 shrink-0">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="font-display text-lg font-bold text-[#E5C17B]">
+                  {lang === 'bg' ? 'Вход с Google' : 'Google Sign-In'}
+                </h2>
+                <p className="text-xs text-zinc-400">
+                  {typeof window !== 'undefined' ? window.location.hostname : ''}
+                </p>
+              </div>
+            </div>
+
+            {authErrorInfo && (
+              <div className="mt-4 rounded-xl border border-red-500/40 bg-red-950/40 p-3.5 text-left space-y-1.5">
+                <p className="text-xs font-semibold text-red-200 leading-relaxed">
+                  {lang === 'bg' ? authErrorInfo.messageBg : authErrorInfo.messageEn}
+                </p>
+                <p className="text-[11px] font-mono text-red-300/90 break-all">
+                  {authErrorInfo.code}
+                  {authErrorInfo.rawMessage ? ` · ${authErrorInfo.rawMessage}` : ''}
+                </p>
+              </div>
+            )}
+
+            <div className="mt-5 flex flex-col gap-2.5">
+              <button
+                type="button"
+                disabled={authBusy}
+                onClick={handleSignInGoogle}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#C59B57] px-4 py-2.5 text-xs font-bold text-[#0B0C10] hover:bg-[#D8B06E] transition-colors disabled:opacity-60"
+              >
+                <RefreshCw className={`h-4 w-4 ${authBusy ? 'animate-spin' : ''}`} />
+                <span>
+                  {authBusy
+                    ? lang === 'bg'
+                      ? 'Свързване с Google...'
+                      : 'Connecting to Google...'
+                    : lang === 'bg'
+                      ? 'Опитай отново (Popup)'
+                      : 'Retry (Popup)'}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                disabled={authBusy}
+                onClick={handleSignInGoogleRedirect}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#C59B57]/60 bg-[#181B22] px-4 py-2.5 text-xs font-semibold text-[#E5C17B] hover:bg-[#222631] transition-colors disabled:opacity-60"
+              >
+                <LogIn className="h-4 w-4" />
+                <span>
+                  {lang === 'bg'
+                    ? 'Вход с пренасочване (ако прозорецът се затваря)'
+                    : 'Sign in with Redirect (if popup closes)'}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                disabled={authBusy}
+                onClick={() => setAuthModalOpen(false)}
+                className="w-full rounded-xl border border-zinc-700 bg-transparent px-4 py-2 text-xs font-medium text-zinc-300 hover:border-zinc-500 hover:text-white transition-colors disabled:opacity-50"
+              >
+                {lang === 'bg' ? 'Затвори' : 'Close'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {toastMessage && (
         <div className="fixed bottom-5 right-5 z-50 rounded-lg bg-[#18181B] px-4 py-3 text-xs font-medium text-white shadow-xl border border-zinc-700">
