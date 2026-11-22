@@ -1,0 +1,114 @@
+@import "tailwindcss";
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: 'Inter', 'Open Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  h1, h2, h3, .font-display {
+    font-family: 'Montserrat', 'Open Sans', 'Inter', sans-serif;
+  }
+
+  .font-mono-tabular {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Smooth GPU-accelerated gallery slideshow motion presets (zero jitter) */
+@keyframes galleryMotionFromLeft {
+  0% {
+    transform: translate3d(-4.5%, 0, 0) scale(1.04);
+  }
+  22% {
+    transform: translate3d(-0.6%, 0, 0) scale(1.02);
+  }
+  100% {
+    transform: translate3d(1.4%, 0, 0) scale(1.05);
+  }
+}
+
+@keyframes galleryMotionDiagonalNE {
+  0% {
+    transform: translate3d(-3.5%, 3%, 0) scale(1.05);
+  }
+  25% {
+    transform: translate3d(-0.5%, 0.4%, 0) scale(1.02);
+  }
+  100% {
+    transform: translate3d(1.8%, -1.4%, 0) scale(1.06);
+  }
+}
+
+@keyframes galleryMotionDropTop {
+  0% {
+    transform: translate3d(0, -4%, 0) scale(1.04);
+  }
+  24% {
+    transform: translate3d(0, -0.4%, 0) scale(1.015);
+  }
+  100% {
+    transform: translate3d(0, 1.2%, 0) scale(1.045);
+  }
+}
+
+@keyframes galleryMotionKenBurns {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  100% {
+    transform: translate3d(-1%, -0.8%, 0) scale(1.08);
+  }
+}
+
+@keyframes galleryMotionDiagonalSW {
+  0% {
+    transform: translate3d(3.5%, -2.5%, 0) scale(1.06);
+  }
+  25% {
+    transform: translate3d(0.4%, -0.2%, 0) scale(1.03);
+  }
+  100% {
+    transform: translate3d(-1.5%, 1.2%, 0) scale(1.01);
+  }
+}
+
+.gallery-slide-motion-0 {
+  animation: galleryMotionFromLeft var(--slide-motion-dur, 6200ms) cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.gallery-slide-motion-1 {
+  animation: galleryMotionDiagonalNE var(--slide-motion-dur, 6200ms) cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.gallery-slide-motion-2 {
+  animation: galleryMotionDropTop var(--slide-motion-dur, 6200ms) cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.gallery-slide-motion-3 {
+  animation: galleryMotionKenBurns var(--slide-motion-dur, 6200ms) cubic-bezier(0.25, 0.8, 0.35, 1) forwards;
+}
+
+.gallery-slide-motion-4 {
+  animation: galleryMotionDiagonalSW var(--slide-motion-dur, 6200ms) cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Anti-print & screenshot deterrence for protected designs */
+@media print {
+  body * {
+    display: none !important;
+    visibility: hidden !important;
+  }
+  body::after {
+    content: "Защитено съдържание — СК МЕБЕЛИ (Светлозар Колев). Печатът и експортът на проекти са забранени.";
+    display: block;
+    padding: 48px;
+    font-size: 20px;
+    color: #18181b;
+    visibility: visible !important;
+  }
+}

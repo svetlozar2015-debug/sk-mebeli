@@ -1,0 +1,6 @@
+{
+  "name": "Atelier Forma — Мебели по поръчка",
+  "description": "Двуезична платформа за производство на мебели по поръчка от ПДЧ и МДФ с интерактивен 2D/3D конфигуратор, каталози Egger/Kronospan/Kastamonu, клиентски профили и защитено ценообразуване.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

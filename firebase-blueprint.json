@@ -1,0 +1,283 @@
+{
+  "entities": {
+    "SiteSettings": {
+      "title": "SiteSettings",
+      "description": "Company branding, logo, Plovdiv contact details and About Us copy.",
+      "type": "object",
+      "properties": {
+        "companyNameBg": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "companyNameEn": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "logoUrl": { "type": "string", "maxLength": 700000 },
+        "phone": { "type": "string", "minLength": 3, "maxLength": 40 },
+        "email": { "type": "string", "minLength": 3, "maxLength": 120 },
+        "cityBg": { "type": "string", "maxLength": 160 },
+        "cityEn": { "type": "string", "maxLength": 160 },
+        "aboutTitleBg": { "type": "string", "maxLength": 180 },
+        "aboutTitleEn": { "type": "string", "maxLength": 180 },
+        "aboutBodyBg": { "type": "string", "maxLength": 3000 },
+        "aboutBodyEn": { "type": "string", "maxLength": 3000 },
+        "workingHoursBg": { "type": "string", "maxLength": 160 },
+        "workingHoursEn": { "type": "string", "maxLength": 160 },
+        "gallerySlideIntervalSec": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["companyNameBg", "companyNameEn", "phone", "email"]
+    },
+    "BoardDecor": {
+      "title": "BoardDecor",
+      "description": "Public board decor visual catalog (Egger, Kronospan, Kastamonu, MDF) without raw pricing.",
+      "type": "object",
+      "properties": {
+        "manufacturer": { "type": "string", "enum": ["Egger", "Kronospan", "Kastamonu", "MDF"] },
+        "code": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "nameBg": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "nameEn": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "category": { "type": "string", "enum": ["wood", "matte", "gloss", "stone"] },
+        "materialType": { "type": "string", "enum": ["MFC", "MDF"] },
+        "priceGroup": { "type": "number", "enum": [1, 2, 3] },
+        "colorHex": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "grainHex": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "roughness": { "type": "number" },
+        "thicknessMm": { "type": "number" },
+        "isBaseDefault": { "type": "boolean" },
+        "active": { "type": "boolean" }
+      },
+      "required": ["manufacturer", "code", "nameBg", "nameEn", "category", "materialType", "colorHex", "thicknessMm", "active"]
+    },
+    "HardwareTier": {
+      "title": "HardwareTier",
+      "description": "Public hardware/mechanism tier catalog (Economy, GTV, Hettich, Blum) without raw unit costs.",
+      "type": "object",
+      "properties": {
+        "brand": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "tier": { "type": "string", "enum": ["economy", "standard", "premium", "luxury"] },
+        "nameBg": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "nameEn": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "descriptionBg": { "type": "string", "maxLength": 400 },
+        "descriptionEn": { "type": "string", "maxLength": 400 },
+        "warrantyYears": { "type": "number" },
+        "loadCapacityKg": { "type": "number" },
+        "softClose": { "type": "boolean" },
+        "isBaseDefault": { "type": "boolean" },
+        "active": { "type": "boolean" }
+      },
+      "required": ["brand", "tier", "nameBg", "nameEn", "softClose", "active"]
+    },
+    "PricingConfig": {
+      "title": "PricingConfig",
+      "description": "Admin-only private pricing table for boards, hardware, edge banding, and craftsmanship percentage.",
+      "type": "object",
+      "properties": {
+        "boardPricesPerSqm": { "type": "object" },
+        "boardGroupMultipliers": { "type": "object" },
+        "hardwarePrices": { "type": "object" },
+        "edgeBandingEurPerMeter": { "type": "number" },
+        "purEdgeBandingEurPerMeter": { "type": "number" },
+        "handleMillingEurPerMeter": { "type": "number" },
+        "hdfBackEurPerSqm": { "type": "number" },
+        "countertopEurPerMeter": { "type": "number" },
+        "backsplashEurPerSqm": { "type": "number" },
+        "golaProfileEurPerMeter": { "type": "number" },
+        "upperLedProfileEurPerMeter": { "type": "number" },
+        "cargoBasketEur": { "type": "number" },
+        "cornerMechanismEur": { "type": "number" },
+        "slidingTrackEurPerMeter": { "type": "number" },
+        "clothesRailEurPerMeter": { "type": "number" },
+        "plinthEurPerMeter": { "type": "number" },
+        "waterSealEurPerMeter": { "type": "number" },
+        "cutoutEurPerHole": { "type": "number" },
+        "cornerMillingEur": { "type": "number" },
+        "glassFrameEurPerSqm": { "type": "number" },
+        "vitrineS02": { "type": "object" },
+        "craftsmanshipPercent": { "type": "number" },
+        "globalMarginPercent": { "type": "number" },
+        "wastePercent": { "type": "number" },
+        "installationPercent": { "type": "number" },
+        "transportEur": { "type": "number" },
+        "floorCarryEurPerFloor": { "type": "number" },
+        "measurementFeeEur": { "type": "number" },
+        "outsideCityEurPerKm": { "type": "number" },
+        "serviceZoneBg": { "type": "string", "maxLength": 240 },
+        "serviceZoneEn": { "type": "string", "maxLength": 240 },
+        "minOrderEur": { "type": "number" },
+        "productionDaysKitchen": { "type": "number" },
+        "productionDaysWardrobe": { "type": "number" },
+        "productionDaysOther": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["boardPricesPerSqm", "hardwarePrices", "edgeBandingEurPerMeter", "hdfBackEurPerSqm", "countertopEurPerMeter", "craftsmanshipPercent"]
+    },
+    "GalleryProject": {
+      "title": "GalleryProject",
+      "description": "Real workshop portfolio photos organized by furniture category.",
+      "type": "object",
+      "properties": {
+        "titleBg": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "titleEn": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "category": { "type": "string", "enum": ["kitchen", "wardrobe", "dresser", "living", "hallway", "office"] },
+        "dimensionsLabel": { "type": "string", "maxLength": 80 },
+        "materialsLabel": { "type": "string", "maxLength": 160 },
+        "imageUrl": { "type": "string", "minLength": 1, "maxLength": 700000 },
+        "presetId": { "type": "string", "maxLength": 64 },
+        "sortOrder": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["titleBg", "titleEn", "category", "imageUrl"]
+    },
+    "CompletedTemplate": {
+      "title": "CompletedTemplate",
+      "description": "Anonymized 100% completed projects published by admin so new clients can load and customize dimensions, hardware, or colors.",
+      "type": "object",
+      "properties": {
+        "titleBg": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "titleEn": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "category": { "type": "string", "enum": ["kitchen", "wardrobe", "dresser", "living", "hallway", "office"] },
+        "dimensionsLabel": { "type": "string", "maxLength": 80 },
+        "summaryBg": { "type": "string", "maxLength": 300 },
+        "summaryEn": { "type": "string", "maxLength": 300 },
+        "config": { "type": "object" },
+        "sourceProjectCode": { "type": "string", "maxLength": 32 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["titleBg", "titleEn", "category", "config"]
+    },
+    "UserProject": {
+      "title": "UserProject",
+      "description": "Client saved 3D furniture projects and consultation inquiries identified by unique projectCode (AF-XXXX).",
+      "type": "object",
+      "properties": {
+        "projectCode": { "type": "string", "minLength": 4, "maxLength": 24, "pattern": "^AF-[0-9A-Z\\-]+$" },
+        "ownerId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "ownerEmail": { "type": "string", "maxLength": 160 },
+        "ownerName": { "type": "string", "maxLength": 120 },
+        "customerPhone": { "type": "string", "maxLength": 40 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "config": { "type": "object" },
+        "calculatedPriceEur": { "type": "number" },
+        "status": { "type": "string", "enum": ["draft", "inquiry_sent", "under_review", "approved", "in_production", "ready_for_install"] },
+        "initialQuestion": { "type": "string", "maxLength": 2000 },
+        "adminNote": { "type": "string", "maxLength": 2000 },
+        "publishedToTemplates": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["projectCode", "ownerId", "ownerEmail", "title", "config", "calculatedPriceEur", "status", "createdAt", "updatedAt"]
+    },
+    "ProjectMessage": {
+      "title": "ProjectMessage",
+      "description": "Direct consultation thread messages between a client and the workshop admin for a specific saved project.",
+      "type": "object",
+      "properties": {
+        "projectOwnerId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "senderId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "senderRole": { "type": "string", "enum": ["client", "admin"] },
+        "senderName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "text": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["projectOwnerId", "senderId", "senderRole", "senderName", "text", "createdAt"]
+    },
+    "MeritItem": {
+      "title": "MeritItem",
+      "description": "Merit (meritbg.com) hardware and accessories catalog item with dimensions, features, brand, unit and price in EUR.",
+      "type": "object",
+      "properties": {
+        "categoryId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "subsectionId": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 180 },
+        "sizeLabel": { "type": "string", "maxLength": 80 },
+        "featureLabel": { "type": "string", "maxLength": 240 },
+        "brandLevel": { "type": "string", "maxLength": 80 },
+        "unit": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "priceEur": { "type": "number" },
+        "active": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["categoryId", "subsectionId", "name", "sizeLabel", "featureLabel", "brandLevel", "unit", "priceEur", "active"]
+    },
+    "PartnerCatalogItem": {
+      "title": "PartnerCatalogItem",
+      "description": "GAL PLAS LTD (galplas.bg) or Nasteh (Plovdiv) furniture hardware/material catalog item with size, feature, brand, unit and EUR price.",
+      "type": "object",
+      "properties": {
+        "vendor": { "type": "string", "enum": ["galplas", "nasteh"] },
+        "categoryId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "subsectionId": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 180 },
+        "sizeLabel": { "type": "string", "maxLength": 80 },
+        "featureLabel": { "type": "string", "maxLength": 240 },
+        "brandLevel": { "type": "string", "maxLength": 80 },
+        "qualityClass": { "type": "string", "enum": ["high", "medium", "low"] },
+        "unit": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "priceEur": { "type": "number" },
+        "active": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["vendor", "categoryId", "subsectionId", "name", "sizeLabel", "featureLabel", "brandLevel", "unit", "priceEur", "active"]
+    },
+    "PartnerSubsection": {
+      "title": "PartnerSubsection",
+      "description": "Admin-created custom subsection under a Nasteh category.",
+      "type": "object",
+      "properties": {
+        "vendor": { "type": "string", "enum": ["nasteh"] },
+        "categoryId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "nameBg": { "type": "string", "minLength": 1, "maxLength": 140 },
+        "nameEn": { "type": "string", "minLength": 1, "maxLength": 140 },
+        "isCustom": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["vendor", "categoryId", "nameBg", "nameEn", "isCustom"]
+    }
+  },
+  "firestore": {
+    "/site_settings/{settingId}": {
+      "schema": { "$ref": "#/entities/SiteSettings" },
+      "description": "Public company profile, logo, Plovdiv contacts and About Us content."
+    },
+    "/board_decors/{decorId}": {
+      "schema": { "$ref": "#/entities/BoardDecor" },
+      "description": "Public MFC and MDF board decor catalog without pricing."
+    },
+    "/hardware_tiers/{tierId}": {
+      "schema": { "$ref": "#/entities/HardwareTier" },
+      "description": "Public hardware mechanisms catalog without unit costs."
+    },
+    "/pricing_config/{configId}": {
+      "schema": { "$ref": "#/entities/PricingConfig" },
+      "description": "Strictly admin-only pricing matrix and craftsmanship percentage."
+    },
+    "/gallery_projects/{projectId}": {
+      "schema": { "$ref": "#/entities/GalleryProject" },
+      "description": "Workshop gallery photos by furniture category."
+    },
+    "/completed_templates/{templateId}": {
+      "schema": { "$ref": "#/entities/CompletedTemplate" },
+      "description": "Completed anonymized furniture configurations ready for clients to customize."
+    },
+    "/user_projects/{projectId}": {
+      "schema": { "$ref": "#/entities/UserProject" },
+      "description": "Client saved 3D projects, inquiry messages, and approval status."
+    },
+    "/user_projects/{projectId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ProjectMessage" },
+      "description": "Consultation chat thread for a client project."
+    },
+    "/merit_items/{itemId}": {
+      "schema": { "$ref": "#/entities/MeritItem" },
+      "description": "Merit (meritbg.com) hardware & accessories catalog organized by 19 categories and 66 subsections."
+    },
+    "/galplas_items/{itemId}": {
+      "schema": { "$ref": "#/entities/PartnerCatalogItem" },
+      "description": "GAL PLAS LTD (galplas.bg) catalog items across За мебели and За кухнята."
+    },
+    "/nasteh_items/{itemId}": {
+      "schema": { "$ref": "#/entities/PartnerCatalogItem" },
+      "description": "Nasteh (Plovdiv) catalog items across 9 hardware & material categories."
+    },
+    "/nasteh_subsections/{subsectionId}": {
+      "schema": { "$ref": "#/entities/PartnerSubsection" },
+      "description": "Custom admin-added subsections inside Nasteh categories."
+    }
+  }
+}

@@ -1,0 +1,401 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Core Reusable Primitives
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+    function incoming() {
+      return request.resource.data;
+    }
+    function existing() {
+      return resource.data;
+    }
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+    function isAdmin() {
+      return isVerified() && (
+        request.auth.token.email == 'svetlozar2015@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // Validation Helpers
+    function isValidSiteSettings(data) {
+      return data.keys().hasAll(['companyNameBg', 'companyNameEn', 'phone', 'email']) &&
+        data.keys().hasOnly([
+          'companyNameBg', 'companyNameEn', 'logoUrl', 'phone', 'email',
+          'cityBg', 'cityEn', 'aboutTitleBg', 'aboutTitleEn',
+          'aboutBodyBg', 'aboutBodyEn', 'workingHoursBg', 'workingHoursEn',
+          'gallerySlideIntervalSec', 'updatedAt'
+        ]) &&
+        data.companyNameBg is string && data.companyNameBg.size() >= 1 && data.companyNameBg.size() <= 120 &&
+        data.companyNameEn is string && data.companyNameEn.size() >= 1 && data.companyNameEn.size() <= 120 &&
+        data.phone is string && data.phone.size() >= 3 && data.phone.size() <= 40 &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 120 &&
+        (!('logoUrl' in data) || (data.logoUrl is string && data.logoUrl.size() <= 700000)) &&
+        (!('cityBg' in data) || (data.cityBg is string && data.cityBg.size() <= 160)) &&
+        (!('cityEn' in data) || (data.cityEn is string && data.cityEn.size() <= 160)) &&
+        (!('aboutTitleBg' in data) || (data.aboutTitleBg is string && data.aboutTitleBg.size() <= 180)) &&
+        (!('aboutTitleEn' in data) || (data.aboutTitleEn is string && data.aboutTitleEn.size() <= 180)) &&
+        (!('aboutBodyBg' in data) || (data.aboutBodyBg is string && data.aboutBodyBg.size() <= 3000)) &&
+        (!('aboutBodyEn' in data) || (data.aboutBodyEn is string && data.aboutBodyEn.size() <= 3000)) &&
+        (!('workingHoursBg' in data) || (data.workingHoursBg is string && data.workingHoursBg.size() <= 160)) &&
+        (!('workingHoursEn' in data) || (data.workingHoursEn is string && data.workingHoursEn.size() <= 160)) &&
+        (!('gallerySlideIntervalSec' in data) || (data.gallerySlideIntervalSec is number && data.gallerySlideIntervalSec >= 3 && data.gallerySlideIntervalSec <= 12));
+    }
+
+    function isValidBoardDecor(data) {
+      return data.keys().hasAll([
+          'manufacturer', 'code', 'nameBg', 'nameEn', 'category',
+          'materialType', 'colorHex', 'thicknessMm', 'active'
+        ]) &&
+        data.keys().hasOnly([
+          'manufacturer', 'code', 'nameBg', 'nameEn', 'category',
+          'materialType', 'priceGroup', 'colorHex', 'grainHex', 'roughness',
+          'thicknessMm', 'isBaseDefault', 'active'
+        ]) &&
+        data.manufacturer in ['Egger', 'Kronospan', 'Kastamonu', 'MDF'] &&
+        data.code is string && data.code.size() >= 1 && data.code.size() <= 40 &&
+        data.nameBg is string && data.nameBg.size() >= 1 && data.nameBg.size() <= 120 &&
+        data.nameEn is string && data.nameEn.size() >= 1 && data.nameEn.size() <= 120 &&
+        data.category in ['wood', 'matte', 'gloss', 'stone'] &&
+        data.materialType in ['MFC', 'MDF'] &&
+        (!('priceGroup' in data) || (data.priceGroup is number && data.priceGroup in [1, 2, 3])) &&
+        data.colorHex is string && data.colorHex.matches('^#[0-9a-fA-F]{6}$') &&
+        (!('grainHex' in data) || (data.grainHex is string && data.grainHex.matches('^#[0-9a-fA-F]{6}$'))) &&
+        (!('roughness' in data) || (data.roughness is number && data.roughness >= 0 && data.roughness <= 1)) &&
+        data.thicknessMm is number && data.thicknessMm >= 4 && data.thicknessMm <= 40 &&
+        (!('isBaseDefault' in data) || data.isBaseDefault is bool) &&
+        data.active is bool;
+    }
+
+    function isValidHardwareTier(data) {
+      return data.keys().hasAll(['brand', 'tier', 'nameBg', 'nameEn', 'softClose', 'active']) &&
+        data.keys().hasOnly([
+          'brand', 'tier', 'nameBg', 'nameEn', 'descriptionBg',
+          'descriptionEn', 'warrantyYears', 'loadCapacityKg',
+          'softClose', 'isBaseDefault', 'active'
+        ]) &&
+        data.brand is string && data.brand.size() >= 1 && data.brand.size() <= 60 &&
+        data.tier in ['economy', 'standard', 'premium', 'luxury'] &&
+        data.nameBg is string && data.nameBg.size() >= 1 && data.nameBg.size() <= 120 &&
+        data.nameEn is string && data.nameEn.size() >= 1 && data.nameEn.size() <= 120 &&
+        (!('descriptionBg' in data) || (data.descriptionBg is string && data.descriptionBg.size() <= 400)) &&
+        (!('descriptionEn' in data) || (data.descriptionEn is string && data.descriptionEn.size() <= 400)) &&
+        (!('warrantyYears' in data) || (data.warrantyYears is number && data.warrantyYears >= 1 && data.warrantyYears <= 30)) &&
+        (!('loadCapacityKg' in data) || (data.loadCapacityKg is number && data.loadCapacityKg >= 5 && data.loadCapacityKg <= 100)) &&
+        data.softClose is bool &&
+        (!('isBaseDefault' in data) || data.isBaseDefault is bool) &&
+        data.active is bool;
+    }
+
+    function isValidPricingConfig(data) {
+      return data.keys().hasAll([
+          'boardPricesPerSqm', 'hardwarePrices', 'edgeBandingEurPerMeter',
+          'hdfBackEurPerSqm', 'countertopEurPerMeter', 'craftsmanshipPercent'
+        ]) &&
+        data.keys().hasOnly([
+          'boardPricesPerSqm', 'boardGroupMultipliers', 'hardwarePrices',
+          'edgeBandingEurPerMeter', 'purEdgeBandingEurPerMeter', 'handleMillingEurPerMeter',
+          'hdfBackEurPerSqm', 'countertopEurPerMeter',
+          'backsplashEurPerSqm', 'golaProfileEurPerMeter', 'upperLedProfileEurPerMeter',
+          'cargoBasketEur', 'cornerMechanismEur', 'slidingTrackEurPerMeter', 'clothesRailEurPerMeter',
+          'plinthEurPerMeter', 'waterSealEurPerMeter', 'cutoutEurPerHole', 'cornerMillingEur', 'glassFrameEurPerSqm', 'vitrineS02',
+          'craftsmanshipPercent', 'globalMarginPercent', 'wastePercent', 'installationPercent', 'transportEur',
+          'floorCarryEurPerFloor', 'measurementFeeEur', 'outsideCityEurPerKm',
+          'serviceZoneBg', 'serviceZoneEn', 'minOrderEur',
+          'productionDaysKitchen', 'productionDaysWardrobe', 'productionDaysOther', 'updatedAt'
+        ]) &&
+        data.boardPricesPerSqm is map &&
+        (!('boardGroupMultipliers' in data) || data.boardGroupMultipliers is map) &&
+        data.hardwarePrices is map &&
+        data.edgeBandingEurPerMeter is number && data.edgeBandingEurPerMeter >= 0 && data.edgeBandingEurPerMeter <= 100 &&
+        (!('purEdgeBandingEurPerMeter' in data) || (data.purEdgeBandingEurPerMeter is number && data.purEdgeBandingEurPerMeter >= 0 && data.purEdgeBandingEurPerMeter <= 200)) &&
+        (!('handleMillingEurPerMeter' in data) || (data.handleMillingEurPerMeter is number && data.handleMillingEurPerMeter >= 0 && data.handleMillingEurPerMeter <= 500)) &&
+        data.hdfBackEurPerSqm is number && data.hdfBackEurPerSqm >= 0 && data.hdfBackEurPerSqm <= 200 &&
+        data.countertopEurPerMeter is number && data.countertopEurPerMeter >= 0 && data.countertopEurPerMeter <= 1000 &&
+        (!('backsplashEurPerSqm' in data) || (data.backsplashEurPerSqm is number && data.backsplashEurPerSqm >= 0 && data.backsplashEurPerSqm <= 1000)) &&
+        (!('golaProfileEurPerMeter' in data) || (data.golaProfileEurPerMeter is number && data.golaProfileEurPerMeter >= 0 && data.golaProfileEurPerMeter <= 500)) &&
+        (!('upperLedProfileEurPerMeter' in data) || (data.upperLedProfileEurPerMeter is number && data.upperLedProfileEurPerMeter >= 0 && data.upperLedProfileEurPerMeter <= 500)) &&
+        (!('cargoBasketEur' in data) || (data.cargoBasketEur is number && data.cargoBasketEur >= 0 && data.cargoBasketEur <= 2000)) &&
+        (!('cornerMechanismEur' in data) || (data.cornerMechanismEur is number && data.cornerMechanismEur >= 0 && data.cornerMechanismEur <= 3000)) &&
+        (!('slidingTrackEurPerMeter' in data) || (data.slidingTrackEurPerMeter is number && data.slidingTrackEurPerMeter >= 0 && data.slidingTrackEurPerMeter <= 1000)) &&
+        (!('clothesRailEurPerMeter' in data) || (data.clothesRailEurPerMeter is number && data.clothesRailEurPerMeter >= 0 && data.clothesRailEurPerMeter <= 500)) &&
+        (!('plinthEurPerMeter' in data) || (data.plinthEurPerMeter is number && data.plinthEurPerMeter >= 0 && data.plinthEurPerMeter <= 500)) &&
+        (!('waterSealEurPerMeter' in data) || (data.waterSealEurPerMeter is number && data.waterSealEurPerMeter >= 0 && data.waterSealEurPerMeter <= 500)) &&
+        (!('cutoutEurPerHole' in data) || (data.cutoutEurPerHole is number && data.cutoutEurPerHole >= 0 && data.cutoutEurPerHole <= 500)) &&
+        (!('cornerMillingEur' in data) || (data.cornerMillingEur is number && data.cornerMillingEur >= 0 && data.cornerMillingEur <= 1000)) &&
+        (!('glassFrameEurPerSqm' in data) || (data.glassFrameEurPerSqm is number && data.glassFrameEurPerSqm >= 0 && data.glassFrameEurPerSqm <= 2000)) &&
+        (!('vitrineS02' in data) || data.vitrineS02 is map) &&
+        (!('globalMarginPercent' in data) || (data.globalMarginPercent is number && data.globalMarginPercent >= 0 && data.globalMarginPercent <= 500)) &&
+        (!('wastePercent' in data) || (data.wastePercent is number && data.wastePercent >= 0 && data.wastePercent <= 100)) &&
+        (!('installationPercent' in data) || (data.installationPercent is number && data.installationPercent >= 0 && data.installationPercent <= 200)) &&
+        (!('transportEur' in data) || (data.transportEur is number && data.transportEur >= 0 && data.transportEur <= 5000)) &&
+        (!('floorCarryEurPerFloor' in data) || (data.floorCarryEurPerFloor is number && data.floorCarryEurPerFloor >= 0 && data.floorCarryEurPerFloor <= 500)) &&
+        (!('measurementFeeEur' in data) || (data.measurementFeeEur is number && data.measurementFeeEur >= 0 && data.measurementFeeEur <= 1000)) &&
+        (!('outsideCityEurPerKm' in data) || (data.outsideCityEurPerKm is number && data.outsideCityEurPerKm >= 0 && data.outsideCityEurPerKm <= 100)) &&
+        (!('serviceZoneBg' in data) || (data.serviceZoneBg is string && data.serviceZoneBg.size() <= 240)) &&
+        (!('serviceZoneEn' in data) || (data.serviceZoneEn is string && data.serviceZoneEn.size() <= 240)) &&
+        (!('minOrderEur' in data) || (data.minOrderEur is number && data.minOrderEur >= 0 && data.minOrderEur <= 50000)) &&
+        (!('productionDaysKitchen' in data) || (data.productionDaysKitchen is number && data.productionDaysKitchen >= 1 && data.productionDaysKitchen <= 180)) &&
+        (!('productionDaysWardrobe' in data) || (data.productionDaysWardrobe is number && data.productionDaysWardrobe >= 1 && data.productionDaysWardrobe <= 180)) &&
+        (!('productionDaysOther' in data) || (data.productionDaysOther is number && data.productionDaysOther >= 1 && data.productionDaysOther <= 180)) &&
+        data.craftsmanshipPercent is number && data.craftsmanshipPercent >= 0 && data.craftsmanshipPercent <= 500;
+    }
+
+    function isValidGalleryProject(data) {
+      return data.keys().hasAll(['titleBg', 'titleEn', 'category', 'imageUrl']) &&
+        data.keys().hasOnly([
+          'titleBg', 'titleEn', 'category', 'dimensionsLabel',
+          'materialsLabel', 'imageUrl', 'presetId', 'sortOrder', 'createdAt'
+        ]) &&
+        data.titleBg is string && data.titleBg.size() >= 1 && data.titleBg.size() <= 160 &&
+        data.titleEn is string && data.titleEn.size() >= 1 && data.titleEn.size() <= 160 &&
+        data.category in ['kitchen', 'wardrobe', 'dresser', 'living', 'hallway', 'office'] &&
+        data.imageUrl is string && data.imageUrl.size() >= 1 && data.imageUrl.size() <= 700000 &&
+        (!('dimensionsLabel' in data) || (data.dimensionsLabel is string && data.dimensionsLabel.size() <= 80)) &&
+        (!('materialsLabel' in data) || (data.materialsLabel is string && data.materialsLabel.size() <= 160)) &&
+        (!('presetId' in data) || (data.presetId is string && data.presetId.size() <= 64)) &&
+        (!('sortOrder' in data) || (data.sortOrder is number && data.sortOrder >= 0 && data.sortOrder <= 10000));
+    }
+
+    function isValidCompletedTemplate(data) {
+      return data.keys().hasAll(['titleBg', 'titleEn', 'category', 'config']) &&
+        data.keys().hasOnly([
+          'titleBg', 'titleEn', 'category', 'dimensionsLabel',
+          'summaryBg', 'summaryEn', 'config', 'sourceProjectCode', 'createdAt'
+        ]) &&
+        data.titleBg is string && data.titleBg.size() >= 1 && data.titleBg.size() <= 160 &&
+        data.titleEn is string && data.titleEn.size() >= 1 && data.titleEn.size() <= 160 &&
+        data.category in ['kitchen', 'wardrobe', 'dresser', 'living', 'hallway', 'office'] &&
+        data.config is map &&
+        (!('dimensionsLabel' in data) || (data.dimensionsLabel is string && data.dimensionsLabel.size() <= 80)) &&
+        (!('summaryBg' in data) || (data.summaryBg is string && data.summaryBg.size() <= 300)) &&
+        (!('summaryEn' in data) || (data.summaryEn is string && data.summaryEn.size() <= 300)) &&
+        (!('sourceProjectCode' in data) || (data.sourceProjectCode is string && data.sourceProjectCode.size() <= 32));
+    }
+
+    function isValidUserProject(data) {
+      return data.keys().hasAll([
+          'projectCode', 'ownerId', 'ownerEmail', 'title',
+          'config', 'calculatedPriceEur', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'projectCode', 'ownerId', 'ownerEmail', 'ownerName', 'customerPhone',
+          'title', 'config', 'calculatedPriceEur', 'status',
+          'initialQuestion', 'adminNote', 'publishedToTemplates', 'createdAt', 'updatedAt'
+        ]) &&
+        data.projectCode is string && data.projectCode.size() >= 4 && data.projectCode.size() <= 24 && data.projectCode.matches('^AF-[0-9A-Z\\-]+$') &&
+        data.ownerId is string && data.ownerId.size() >= 1 && data.ownerId.size() <= 128 &&
+        data.ownerEmail is string && data.ownerEmail.size() <= 160 &&
+        (!('ownerName' in data) || (data.ownerName is string && data.ownerName.size() <= 120)) &&
+        (!('customerPhone' in data) || (data.customerPhone is string && data.customerPhone.size() <= 40)) &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 160 &&
+        data.config is map &&
+        data.calculatedPriceEur is number && data.calculatedPriceEur >= 0 && data.calculatedPriceEur <= 500000 &&
+        data.status in ['draft', 'inquiry_sent', 'under_review', 'approved', 'in_production', 'ready_for_install'] &&
+        (!('initialQuestion' in data) || (data.initialQuestion is string && data.initialQuestion.size() <= 2000)) &&
+        (!('adminNote' in data) || (data.adminNote is string && data.adminNote.size() <= 2000)) &&
+        (!('publishedToTemplates' in data) || data.publishedToTemplates is bool);
+    }
+
+    function isValidProjectMessage(data) {
+      return data.keys().hasAll(['projectOwnerId', 'senderId', 'senderRole', 'senderName', 'text', 'createdAt']) &&
+        data.keys().hasOnly(['projectOwnerId', 'senderId', 'senderRole', 'senderName', 'text', 'createdAt']) &&
+        data.projectOwnerId is string && data.projectOwnerId.size() >= 1 && data.projectOwnerId.size() <= 128 &&
+        data.senderId is string && data.senderId.size() >= 1 && data.senderId.size() <= 128 &&
+        data.senderRole in ['client', 'admin'] &&
+        data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 120 &&
+        data.text is string && data.text.size() >= 1 && data.text.size() <= 2000;
+    }
+
+    function isValidMeritItem(data) {
+      return data.keys().hasAll([
+          'categoryId', 'subsectionId', 'name', 'sizeLabel',
+          'featureLabel', 'brandLevel', 'unit', 'priceEur', 'active'
+        ]) &&
+        data.keys().hasOnly([
+          'categoryId', 'subsectionId', 'name', 'sizeLabel',
+          'featureLabel', 'brandLevel', 'unit', 'priceEur', 'active', 'updatedAt'
+        ]) &&
+        data.categoryId is string && data.categoryId.size() >= 1 && data.categoryId.size() <= 64 &&
+        data.subsectionId is string && data.subsectionId.size() >= 1 && data.subsectionId.size() <= 80 &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 180 &&
+        data.sizeLabel is string && data.sizeLabel.size() <= 80 &&
+        data.featureLabel is string && data.featureLabel.size() <= 240 &&
+        data.brandLevel is string && data.brandLevel.size() <= 80 &&
+        data.unit is string && data.unit.size() >= 1 && data.unit.size() <= 32 &&
+        data.priceEur is number && data.priceEur >= 0 && data.priceEur <= 100000 &&
+        data.active is bool;
+    }
+
+    function isValidPartnerCatalogItem(data, expectedVendor) {
+      return data.keys().hasAll([
+          'vendor', 'categoryId', 'subsectionId', 'name', 'sizeLabel',
+          'featureLabel', 'brandLevel', 'unit', 'priceEur', 'active'
+        ]) &&
+        data.keys().hasOnly([
+          'vendor', 'categoryId', 'subsectionId', 'name', 'sizeLabel',
+          'featureLabel', 'brandLevel', 'qualityClass', 'unit', 'priceEur', 'active', 'updatedAt'
+        ]) &&
+        data.vendor == expectedVendor &&
+        data.categoryId is string && data.categoryId.size() >= 1 && data.categoryId.size() <= 64 &&
+        data.subsectionId is string && data.subsectionId.size() >= 1 && data.subsectionId.size() <= 80 &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 180 &&
+        data.sizeLabel is string && data.sizeLabel.size() <= 80 &&
+        data.featureLabel is string && data.featureLabel.size() <= 240 &&
+        data.brandLevel is string && data.brandLevel.size() <= 80 &&
+        (!('qualityClass' in data) || data.qualityClass in ['high', 'medium', 'low']) &&
+        data.unit is string && data.unit.size() >= 1 && data.unit.size() <= 32 &&
+        data.priceEur is number && data.priceEur >= 0 && data.priceEur <= 100000 &&
+        data.active is bool;
+    }
+
+    function isValidPartnerSubsection(data) {
+      return data.keys().hasAll(['vendor', 'categoryId', 'nameBg', 'nameEn', 'isCustom']) &&
+        data.keys().hasOnly(['vendor', 'categoryId', 'nameBg', 'nameEn', 'isCustom', 'updatedAt']) &&
+        data.vendor == 'nasteh' &&
+        data.categoryId is string && data.categoryId.size() >= 1 && data.categoryId.size() <= 64 &&
+        data.nameBg is string && data.nameBg.size() >= 1 && data.nameBg.size() <= 140 &&
+        data.nameEn is string && data.nameEn.size() >= 1 && data.nameEn.size() <= 140 &&
+        data.isCustom is bool;
+    }
+
+    // 1. Public Company Settings (Write: Admin only)
+    match /site_settings/{settingId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(settingId) && isAdmin() && isValidSiteSettings(incoming());
+      allow delete: if isValidId(settingId) && isAdmin();
+    }
+
+    // 2. Public Board Decors Catalog (NO PRICES)
+    match /board_decors/{decorId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(decorId) && isAdmin() && isValidBoardDecor(incoming());
+      allow delete: if isValidId(decorId) && isAdmin();
+    }
+
+    // 3. Public Hardware Tiers Catalog (NO PRICES)
+    match /hardware_tiers/{tierId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(tierId) && isAdmin() && isValidHardwareTier(incoming());
+      allow delete: if isValidId(tierId) && isAdmin();
+    }
+
+    // 4. Strictly Hidden Admin Pricing Config
+    match /pricing_config/{configId} {
+      allow get, list: if isAdmin();
+      allow create, update: if isValidId(configId) && isAdmin() && isValidPricingConfig(incoming());
+      allow delete: if isValidId(configId) && isAdmin();
+    }
+
+    // 5. Public Gallery Projects
+    match /gallery_projects/{projectId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(projectId) && isAdmin() && isValidGalleryProject(incoming());
+      allow delete: if isValidId(projectId) && isAdmin();
+    }
+
+    // 6. Public Completed / Ready Templates (Anonymized)
+    match /completed_templates/{templateId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(templateId) && isAdmin() && isValidCompletedTemplate(incoming());
+      allow delete: if isValidId(templateId) && isAdmin();
+    }
+
+    // 7. Client Saved Projects & Inquiries (Isolated by ownerId / Admin)
+    match /user_projects/{projectId} {
+      allow get: if isValidId(projectId) && isVerified() && (existing().ownerId == request.auth.uid || isAdmin());
+      allow list: if isVerified() && (resource.data.ownerId == request.auth.uid || isAdmin());
+
+      allow create: if isValidId(projectId) && isVerified() && isValidUserProject(incoming()) &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().status in ['draft', 'inquiry_sent'] &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isValidId(projectId) && isVerified() && isValidUserProject(incoming()) &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().projectCode == existing().projectCode &&
+        incoming().updatedAt == request.time && (
+          isAdmin() || (
+            existing().ownerId == request.auth.uid &&
+            !(existing().status in ['approved', 'in_production', 'ready_for_install']) &&
+            incoming().status in ['draft', 'inquiry_sent'] &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'title', 'config', 'calculatedPriceEur', 'status',
+              'customerPhone', 'initialQuestion', 'updatedAt'
+            ])
+          )
+        );
+
+      allow delete: if isValidId(projectId) && isVerified() && (
+        isAdmin() || (existing().ownerId == request.auth.uid && existing().status == 'draft')
+      );
+
+      // 8. Project Consultation Messages Subcollection (Master Gate)
+      match /messages/{messageId} {
+        allow get: if isValidId(projectId) && isValidId(messageId) && isVerified() && (
+          isAdmin() || get(/databases/$(database)/documents/user_projects/$(projectId)).data.ownerId == request.auth.uid
+        );
+        allow list: if isVerified() && (isAdmin() || resource.data.projectOwnerId == request.auth.uid);
+
+        allow create: if isValidId(projectId) && isValidId(messageId) && isVerified() &&
+          isValidProjectMessage(incoming()) &&
+          incoming().senderId == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          exists(/databases/$(database)/documents/user_projects/$(projectId)) &&
+          incoming().projectOwnerId == get(/databases/$(database)/documents/user_projects/$(projectId)).data.ownerId && (
+            (isAdmin() && incoming().senderRole == 'admin') ||
+            (get(/databases/$(database)/documents/user_projects/$(projectId)).data.ownerId == request.auth.uid && incoming().senderRole == 'client')
+          );
+
+        allow update, delete: if isValidId(projectId) && isValidId(messageId) && isAdmin();
+      }
+    }
+
+    // 9. Admin Lookup Collection
+    match /admins/{uid} {
+      allow get: if isVerified() && (request.auth.uid == uid || isAdmin());
+      allow list, write: if false;
+    }
+
+    // 10. Merit (meritbg.com) Hardware & Accessories Catalog
+    match /merit_items/{itemId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(itemId) && isAdmin() && isValidMeritItem(incoming());
+      allow delete: if isValidId(itemId) && isAdmin();
+    }
+
+    // 11. GAL PLAS LTD (galplas.bg) Catalog
+    match /galplas_items/{itemId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(itemId) && isAdmin() && isValidPartnerCatalogItem(incoming(), 'galplas');
+      allow delete: if isValidId(itemId) && isAdmin();
+    }
+
+    // 12. Nasteh (Plovdiv) Catalog & Custom Subsections
+    match /nasteh_items/{itemId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(itemId) && isAdmin() && isValidPartnerCatalogItem(incoming(), 'nasteh');
+      allow delete: if isValidId(itemId) && isAdmin();
+    }
+
+    match /nasteh_subsections/{subsectionId} {
+      allow get, list: if true;
+      allow create, update: if isValidId(subsectionId) && isAdmin() && isValidPartnerSubsection(incoming());
+      allow delete: if isValidId(subsectionId) && isAdmin();
+    }
+  }
+}
