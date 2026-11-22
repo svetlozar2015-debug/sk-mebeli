@@ -1,4 +1,3 @@
-import crypto from 'node:crypto';
 import express from 'express';
 import fs from 'node:fs';
 import nodemailer from 'nodemailer';
@@ -41,7 +40,7 @@ import {
   UserProject,
 } from './src/types/furniture.ts';
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 const PRICING_FILE = path.join(DATA_DIR, 'pricing-config.json');
 const DECORS_FILE = path.join(DATA_DIR, 'board-decors.json');
@@ -52,45 +51,6 @@ const MERIT_FILE = path.join(DATA_DIR, 'merit-catalog.json');
 const GALPLAS_FILE = path.join(DATA_DIR, 'galplas-catalog.json');
 const NASTEH_FILE = path.join(DATA_DIR, 'nasteh-catalog.json');
 const CRM_PROJECTS_FILE = path.join(DATA_DIR, 'crm-projects.json');
-
-const ADMIN_SESSION_SECRET =
-  process.env.ADMIN_SESSION_SECRET ||
-  crypto.createHash('sha256').update(`${firebaseConfig.apiKey}:atelier-forma-admin`).digest('hex');
-
-function issueAdminToken(email: string): string {
-  const payload = Buffer.from(
-    JSON.stringify({ email, exp: Date.now() + 24 * 60 * 60 * 1000 }),
-    'utf-8',
-  ).toString('base64url');
-  const sig = crypto.createHmac('sha256', ADMIN_SESSION_SECRET).update(payload).digest('hex');
-  return `${payload}.${sig}`;
-}
-
-function verifyServerAdminToken(token: string): boolean {
-  const dot = token.indexOf('.');
-  if (dot <= 0) return false;
-  const payloadB64 = token.slice(0, dot);
-  const sigHex = token.slice(dot + 1);
-  if (!payloadB64 || !sigHex) return false;
-  try {
-    const expectedHex = crypto
-      .createHmac('sha256', ADMIN_SESSION_SECRET)
-      .update(payloadB64)
-      .digest('hex');
-    const a = Buffer.from(sigHex, 'hex');
-    const b = Buffer.from(expectedHex, 'hex');
-    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return false;
-    const parsed = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf-8')) as {
-      email?: string;
-      exp?: number;
-    };
-    return Boolean(
-      parsed.email === ADMIN_EMAIL && typeof parsed.exp === 'number' && parsed.exp > Date.now(),
-    );
-  } catch {
-    return false;
-  }
-}
 
 function readJsonFile<T>(filePath: string, fallback: T): T {
   try {
@@ -186,11 +146,14 @@ let activeNastehSubsections: PartnerSubsectionDef[] = Array.isArray(
   ? initialNastehStore.customSubsections
   : [];
 
-async function verifyAdminFirebaseToken(authHeader?: string): Promise<boolean> {
-  if (!authHeader || !authHeader.startsWith('Bearer ')) return false;
+async function verifyAdminFirebaseUser(
+  authHeader?: string,
+): Promise<{ isAdmin: boolean; email: string | null }> {
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return { isAdmin: false, email: null };
+  }
   const idToken = authHeader.slice(7).trim();
-  if (!idToken) return false;
-  if (verifyServerAdminToken(idToken)) return true;
+  if (!idToken) return { isAdmin: false, email: null };
   try {
     const resp = await fetch(
       `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${firebaseConfig.apiKey}`,
@@ -200,22 +163,43 @@ async function verifyAdminFirebaseToken(authHeader?: string): Promise<boolean> {
         body: JSON.stringify({ idToken }),
       },
     );
-    if (!resp.ok) return false;
+    if (!resp.ok) return { isAdmin: false, email: null };
     const data = (await resp.json()) as {
-      users?: Array<{ email?: string; emailVerified?: boolean }>;
+      users?: Array<{ localId?: string; email?: string; emailVerified?: boolean }>;
     };
     const user = data.users?.[0];
-    return Boolean(user && user.email === ADMIN_EMAIL && user.emailVerified === true);
+    if (!user || !user.localId || !user.email || user.emailVerified !== true) {
+      return { isAdmin: false, email: null };
+    }
+    if (user.email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+      return { isAdmin: true, email: user.email };
+    }
+    const dbId = firebaseConfig.firestoreDatabaseId || '(default)';
+    const adminDocResp = await fetch(
+      `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${encodeURIComponent(dbId)}/documents/admins/${encodeURIComponent(user.localId)}`,
+      {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${idToken}` },
+      },
+    );
+    if (adminDocResp.ok) {
+      return { isAdmin: true, email: user.email };
+    }
+    return { isAdmin: false, email: null };
   } catch {
-    return false;
+    return { isAdmin: false, email: null };
   }
+}
+
+async function verifyAdminFirebaseToken(authHeader?: string): Promise<boolean> {
+  const res = await verifyAdminFirebaseUser(authHeader);
+  return res.isAdmin;
 }
 
 async function verifyFirebaseUserEmail(authHeader?: string): Promise<string | null> {
   if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
   const idToken = authHeader.slice(7).trim();
   if (!idToken) return null;
-  if (verifyServerAdminToken(idToken)) return ADMIN_EMAIL;
   try {
     const resp = await fetch(
       `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${firebaseConfig.apiKey}`,
@@ -230,7 +214,7 @@ async function verifyFirebaseUserEmail(authHeader?: string): Promise<string | nu
       users?: Array<{ email?: string; emailVerified?: boolean }>;
     };
     const user = data.users?.[0];
-    return user?.email || null;
+    return user && user.emailVerified === true && user.email ? user.email : null;
   } catch {
     return null;
   }
@@ -518,19 +502,13 @@ async function startServer() {
     res.json({ ok: true });
   });
 
-  // Direct 1-click Admin session while styling/configuring
-  app.post('/api/admin/quick-enter', (_req, res) => {
-    const token = issueAdminToken(ADMIN_EMAIL);
-    res.json({ ok: true, token, email: ADMIN_EMAIL });
-  });
-
   app.get('/api/admin/verify', async (req, res) => {
-    const ok = await verifyAdminFirebaseToken(req.headers.authorization);
-    if (!ok) {
+    const adminCheck = await verifyAdminFirebaseUser(req.headers.authorization);
+    if (!adminCheck.isAdmin) {
       res.status(401).json({ ok: false });
       return;
     }
-    res.json({ ok: true, email: ADMIN_EMAIL });
+    res.json({ ok: true, email: adminCheck.email });
   });
 
   // Public catalog overrides persisted on server
